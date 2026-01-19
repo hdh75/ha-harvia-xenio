@@ -191,6 +191,154 @@ class HarviaFanSwitch(SwitchEntity):
         await self._device.set_fan(False)
         self._is_on = False
 
+class HarviaDehumidifierSwitch(SwitchEntity):
+    def __init__(self, device, name, sauna):
+        self._device = device
+        self._name = name + ' Dehumidifier'
+        self._is_on = device.dehumOn
+        self._device_id = device.id + '_dehumidifier'
+        self._sauna = sauna
+        self._attr_unique_id = device.id + '_dehumidifier'
+        self._attr_icon = 'mdi:water-minus'
+
+    async def async_added_to_hass(self):
+        self._device.dehumidifierSwitch = self
+        await self._device.update_ha_devices()
+
+    async def update_state(self):
+        self.async_write_ha_state()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def is_on(self):
+        return self._is_on
+
+    @property
+    def unique_id(self):
+        return self._device_id
+
+    async def async_turn_on(self, **kwargs):
+        await self._device.set_dehumidifier(True)
+        self._is_on = True
+
+    async def async_turn_off(self, **kwargs):
+        await self._device.set_dehumidifier(False)
+        self._is_on = False
+
+class HarviaAutoFanSwitch(SwitchEntity):
+    def __init__(self, device, name, sauna):
+        self._device = device
+        self._name = name + ' Auto Fan'
+        self._is_on = device.autoFanOn
+        self._device_id = device.id + '_auto_fan'
+        self._sauna = sauna
+        self._attr_unique_id = device.id + '_auto_fan'
+        self._attr_icon = 'mdi:fan-auto'
+
+    async def async_added_to_hass(self):
+        self._device.autoFanSwitch = self
+        await self._device.update_ha_devices()
+
+    async def update_state(self):
+        self.async_write_ha_state()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def is_on(self):
+        return self._is_on
+
+    @property
+    def unique_id(self):
+        return self._device_id
+
+    async def async_turn_on(self, **kwargs):
+        await self._device.set_auto_fan(True)
+        self._is_on = True
+
+    async def async_turn_off(self, **kwargs):
+        await self._device.set_auto_fan(False)
+        self._is_on = False
+
+class HarviaAromaSwitch(SwitchEntity):
+    def __init__(self, device, name, sauna):
+        self._device = device
+        self._name = name + ' Aroma Pump'
+        self._is_on = device.aromaOn
+        self._device_id = device.id + '_aroma'
+        self._sauna = sauna
+        self._attr_unique_id = device.id + '_aroma'
+        self._attr_icon = 'mdi:flower'
+
+    async def async_added_to_hass(self):
+        self._device.aromaSwitch = self
+        await self._device.update_ha_devices()
+
+    async def update_state(self):
+        self.async_write_ha_state()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def is_on(self):
+        return self._is_on
+
+    @property
+    def unique_id(self):
+        return self._device_id
+
+    async def async_turn_on(self, **kwargs):
+        await self._device.set_aroma(True)
+        self._is_on = True
+
+    async def async_turn_off(self, **kwargs):
+        await self._device.set_aroma(False)
+        self._is_on = False
+
+class HarviaWeeklyClockSwitch(SwitchEntity):
+    def __init__(self, device, name, sauna):
+        self._device = device
+        self._name = name + ' Weekly Timer'
+        self._is_on = device.wClkOn
+        self._device_id = device.id + '_weekly_clock'
+        self._sauna = sauna
+        self._attr_unique_id = device.id + '_weekly_clock'
+        self._attr_icon = 'mdi:calendar-clock'
+
+    async def async_added_to_hass(self):
+        self._device.weeklyClockSwitch = self
+        await self._device.update_ha_devices()
+
+    async def update_state(self):
+        self.async_write_ha_state()
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def is_on(self):
+        return self._is_on
+
+    @property
+    def unique_id(self):
+        return self._device_id
+
+    async def async_turn_on(self, **kwargs):
+        await self._device.set_weekly_clock_enable(True)
+        self._is_on = True
+
+    async def async_turn_off(self, **kwargs):
+        await self._device.set_weekly_clock_enable(False)
+        self._is_on = False
+
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up de Harvia switches."""
     # Hier zou je de logica toevoegen om je apparaten op te halen.
