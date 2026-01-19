@@ -10,12 +10,12 @@ import uuid
 import random
 
 
-from .switch import HarviaPowerSwitch, HarviaLightSwitch, HarviaFanSwitch, HarviaSteamerSwitch
+from .switch import HarviaPowerSwitch, HarviaLightSwitch, HarviaFanSwitch, HarviaSteamerSwitch, HarviaDehumidifierSwitch, HarviaAutoFanSwitch, HarviaAromaSwitch, HarviaWeeklyClockSwitch
 from .climate import HarviaThermostat
-from .sensor import HarviaHumiditySensor
-from .number import HarviaHumiditySetPoint
+from .sensor import HarviaHumiditySensor, HarviaWifiSensor, HarviaRemainingTimeSensor, HarviaMaxOnTimeSensor, HarviaHeatUpTimeSensor, HarviaRelayCounterSensor, HarviaSteamerCounterSensor
+from .number import HarviaHumiditySetPoint, HarviaAromaLevelNumber
 from .api import HarviaSaunaAPI
-from .binary_sensor import HarviaDoorSensor
+from .binary_sensor import HarviaDoorSensor, HarviaHeatingBinarySensor
 from .constants import DOMAIN, STORAGE_KEY, STORAGE_VERSION, REGION,_LOGGER
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
@@ -63,6 +63,31 @@ class HarviaDevice:
         self.switches = None
         self.thermostats = None
         self.lastestUpdate = None
+        self.isHeating = False
+        self.wifiRSSI = None
+        self.maxOnTime = None
+        self.wifiSensor = None
+        self.remainingTimeSensor = None
+        self.maxOnTimeSensor = None
+        self.heatUpTimeSensor = None
+        self.heatingBinarySensor = None
+        self.dehumidifierSwitch = None
+        self.autoFanSwitch = None
+        self.aromaSwitch = None
+        self.weeklyClockSwitch = None
+        self.aromaLevelNumber = None
+        self.relayCounterSensors = []
+        self.steamerCounterSensor = None
+
+        self.dehumOn = False
+        self.autoFanOn = False
+        self.aromaOn = False
+        self.wClkOn = False
+        self.aromaLevel = 0
+        self.relay1Count = 0
+        self.relay2Count = 0
+        self.relay3Count = 0
+        self.steamerCount = 0
 
 
     async def update_data(self, data: dict):
@@ -83,7 +108,7 @@ class HarviaDevice:
         if 'steamEn' in data:
             self.steamOn = bool(data['steamEn'])
         if 'heatOn' in data:
-            self.active = data['heatOn']
+            self.isHeating = data['heatOn']
         if 'targetTemp' in data:
             self.targetTemp = data['targetTemp']
         if 'targetRh' in data:
@@ -96,6 +121,28 @@ class HarviaDevice:
             self.currentTemp = data['temperature']
         if 'humidity' in data:
             self.humidity = data['humidity']
+        if 'wifiRSSI' in data:
+            self.wifiRSSI = data['wifiRSSI']
+        if 'onTime' in data:
+            self.maxOnTime = data['onTime']
+        if 'dehumEn' in data:
+            self.dehumOn = bool(data['dehumEn'])
+        if 'autoFan' in data:
+            self.autoFanOn = bool(data['autoFan'])
+        if 'aromaEn' in data:
+            self.aromaOn = bool(data['aromaEn'])
+        if 'wClkEn' in data:
+            self.wClkOn = bool(data['wClkEn'])
+        if 'aromaLevel' in data:
+            self.aromaLevel = data['aromaLevel']
+        if 'ph1RelayCounter' in data:
+            self.relay1Count = data['ph1RelayCounter']
+        if 'ph2RelayCounter' in data:
+            self.relay2Count = data['ph2RelayCounter']
+        if 'ph3RelayCounter' in data:
+            self.relay3Count = data['ph3RelayCounter']
+        if 'steamOnCounter' in data:
+            self.steamerCount = data['steamOnCounter']
         if 'timestamp' in data:
             self.lastestUpdate = data['timestamp']
         if 'statusCodes' in data:
@@ -107,52 +154,115 @@ class HarviaDevice:
         await self.update_ha_devices()
 
     async def update_ha_devices(self):
+        try:
+            if self.lightSwitch is not None:
+                self.lightSwitch._is_on = self.lightsOn
+                await self.lightSwitch.update_state()
 
-        if self.lightSwitch is not None:
-            self.lightSwitch._is_on = self.lightsOn
-            await self.lightSwitch.update_state()
+            if self.powerSwitch is not None:
+                self.powerSwitch._is_on = self.active
+                await self.powerSwitch.update_state()
 
-        if self.powerSwitch is not None:
-            self.powerSwitch._is_on = self.active
-            await self.powerSwitch.update_state()
+            if self.steamerSwitch is not None:
+                self.steamerSwitch._is_on = self.steamOn
+                await self.steamerSwitch.update_state()
 
-        if self.steamerSwitch is not None:
-            self.steamerSwitch._is_on = self.steamOn
-            await self.steamerSwitch.update_state()
-
-        if self.fanSwitch is not None:
-            self.fanSwitch._is_on = self.fanOn
-            await self.fanSwitch.update_state()
+            if self.fanSwitch is not None:
+                self.fanSwitch._is_on = self.fanOn
+                await self.fanSwitch.update_state()
 
 
-        safetyStatus =  int(str(self.statusCodes)[1])
+            safetyStatus = 0
+            if self.statusCodes is not None and len(str(self.statusCodes)) > 1:
+                try:
+                    safetyStatus = int(str(self.statusCodes)[1])
+                except ValueError:
+                    safetyStatus = 0
+            
+            if self.doorSensor is not None:
+                if safetyStatus == 9:
+                    _LOGGER.debug("Door is open")
+                    self.doorSensor._state = STATE_ON
+                else:
+                    # _LOGGER.debug("Door is closed")
+                    self.doorSensor._state = STATE_OFF
+                await self.doorSensor.update_state()
 
-        if self.doorSensor is not None:
-            if safetyStatus == 9:
-                _LOGGER.debug("Door is open")
-                self.doorSensor._state = STATE_ON
-            else:
-                _LOGGER.debug("Door is closed")
-                self.doorSensor._state = STATE_OFF
-            await self.doorSensor.update_state()
+            if self.humiditySensor is not None:
+                self.humiditySensor._state = self.humidity
+                await self.humiditySensor.update_state()
 
-        if self.humiditySensor is not None:
-            self.humiditySensor._state = self.humidity
-            await self.humiditySensor.update_state()
+            if self.wifiSensor is not None:
+                self.wifiSensor._state = self.wifiRSSI
+                await self.wifiSensor.update_state()
 
-        if self.humidityNumber is not None:
-            self.humidityNumber._state = self.targetRh
-            await self.humidityNumber.update_state()
+            if self.remainingTimeSensor is not None:
+                self.remainingTimeSensor._state = self.remainingTime
+                await self.remainingTimeSensor.update_state()
 
-        if self.thermostat is not None:
-            self.thermostat._target_temperature = self.targetTemp
-            self.thermostat._current_temperature = self.currentTemp
+            if self.maxOnTimeSensor is not None:
+                self.maxOnTimeSensor._state = self.maxOnTime
+                await self.maxOnTimeSensor.update_state()
 
-            if self.active == True:
-                self.thermostat._hvac_mode = HVACMode.HEAT
-            else:
-                self.thermostat._hvac_mode =  HVACMode.OFF
-            await self.thermostat.update_state()
+            if self.heatUpTimeSensor is not None:
+                self.heatUpTimeSensor._state = self.heatUpTime
+                await self.heatUpTimeSensor.update_state()
+
+            if self.heatingBinarySensor is not None:
+                if self.isHeating:
+                    self.heatingBinarySensor._state = STATE_ON
+                else:
+                    self.heatingBinarySensor._state = STATE_OFF
+                await self.heatingBinarySensor.update_state()
+
+            if self.dehumidifierSwitch is not None:
+                self.dehumidifierSwitch._is_on = self.dehumOn
+                await self.dehumidifierSwitch.update_state()
+
+            if self.autoFanSwitch is not None:
+                self.autoFanSwitch._is_on = self.autoFanOn
+                await self.autoFanSwitch.update_state()
+
+            if self.aromaSwitch is not None:
+                self.aromaSwitch._is_on = self.aromaOn
+                await self.aromaSwitch.update_state()
+
+            if self.weeklyClockSwitch is not None:
+                self.weeklyClockSwitch._is_on = self.wClkOn
+                await self.weeklyClockSwitch.update_state()
+            
+            if self.aromaLevelNumber is not None:
+                self.aromaLevelNumber._state = self.aromaLevel
+                await self.aromaLevelNumber.update_state()
+                
+            for relaySensor in self.relayCounterSensors:
+                if 'ph1' in relaySensor._device_id:
+                    relaySensor._state = self.relay1Count
+                elif 'ph2' in relaySensor._device_id:
+                    relaySensor._state = self.relay2Count
+                elif 'ph3' in relaySensor._device_id:
+                    relaySensor._state = self.relay3Count
+                await relaySensor.update_state()
+            
+            if self.steamerCounterSensor is not None:
+                self.steamerCounterSensor._state = self.steamerCount
+                await self.steamerCounterSensor.update_state()
+
+            if self.humidityNumber is not None:
+                self.humidityNumber._state = self.targetRh
+                await self.humidityNumber.update_state()
+
+            if self.thermostat is not None:
+                self.thermostat._target_temperature = self.targetTemp
+                self.thermostat._current_temperature = self.currentTemp
+
+                if self.active == True:
+                    self.thermostat._hvac_mode = HVACMode.HEAT
+                else:
+                    self.thermostat._hvac_mode =  HVACMode.OFF
+                await self.thermostat.update_state()
+        except Exception as e:
+            _LOGGER.error("Error updating HA devices: %s", e)
 
     async def set_target_temperature(self, temp: int):
 
@@ -183,6 +293,30 @@ class HarviaDevice:
         payload = {'active': activeInt}
         await self.sauna.device_mutation(deviceId=self.id,payload=payload)
 
+    async def set_dehumidifier(self, state: bool):
+        val = int(state)
+        payload = {'dehumEn': val}
+        await self.sauna.device_mutation(deviceId=self.id,payload=payload)
+    
+    async def set_auto_fan(self, state: bool):
+        val = int(state)
+        payload = {'autoFan': val}
+        await self.sauna.device_mutation(deviceId=self.id,payload=payload)
+
+    async def set_aroma(self, state: bool):
+        val = int(state)
+        payload = {'aromaEn': val}
+        await self.sauna.device_mutation(deviceId=self.id,payload=payload)
+
+    async def set_weekly_clock_enable(self, state: bool):
+        val = int(state)
+        payload = {'wClkEn': val}
+        await self.sauna.device_mutation(deviceId=self.id,payload=payload)
+
+    async def set_aroma_level(self, value: float):
+        payload = {'aromaLevel': int(value)}
+        await self.sauna.device_mutation(deviceId=self.id,payload=payload)
+    
     async def dump_data(self):
 
         data = { 'name': self.name, 'active': self.active, 'lightsOn': self.lightsOn, 'SteamOn': self.steamOn,  'targetTemp': self.targetTemp,  'targetRh': self.targetRh, 'fanOn':  self.fanOn, 'heatUpTime': self.heatUpTime  }
@@ -200,6 +334,9 @@ class HarviaDevice:
         binarySensor = HarviaDoorSensor(device=self, name=self.name, sauna=self.sauna)
         self.binarySensors.append(binarySensor)
 
+        heatingBinarySensor = HarviaHeatingBinarySensor(device=self, name=self.name, sauna=self.sauna)
+        self.binarySensors.append(heatingBinarySensor)
+
         return self.binarySensors
 
 
@@ -213,6 +350,34 @@ class HarviaDevice:
         humiditySensor = HarviaHumiditySensor(device=self, name=self.name, sauna=self.sauna)
         self.sensors.append(humiditySensor)
 
+        wifiSensor = HarviaWifiSensor(device=self, name=self.name, sauna=self.sauna)
+        self.sensors.append(wifiSensor)
+
+        remainingTimeSensor = HarviaRemainingTimeSensor(device=self, name=self.name, sauna=self.sauna)
+        self.sensors.append(remainingTimeSensor)
+
+        maxOnTimeSensor = HarviaMaxOnTimeSensor(device=self, name=self.name, sauna=self.sauna)
+        self.sensors.append(maxOnTimeSensor)
+
+        heatUpTimeSensor = HarviaHeatUpTimeSensor(device=self, name=self.name, sauna=self.sauna)
+        self.sensors.append(heatUpTimeSensor)
+
+        relay1 = HarviaRelayCounterSensor(device=self, name=self.name, sauna=self.sauna, phase='ph1')
+        self.sensors.append(relay1)
+        self.relayCounterSensors.append(relay1)
+
+        relay2 = HarviaRelayCounterSensor(device=self, name=self.name, sauna=self.sauna, phase='ph2')
+        self.sensors.append(relay2)
+        self.relayCounterSensors.append(relay2)
+
+        relay3 = HarviaRelayCounterSensor(device=self, name=self.name, sauna=self.sauna, phase='ph3')
+        self.sensors.append(relay3)
+        self.relayCounterSensors.append(relay3)
+
+        steamerCounter = HarviaSteamerCounterSensor(device=self, name=self.name, sauna=self.sauna)
+        self.sensors.append(steamerCounter)
+        self.steamerCounterSensor = steamerCounter
+
         return self.sensors
 
     async def get_numbers(self) -> list:
@@ -224,6 +389,9 @@ class HarviaDevice:
 
         humidityNumber = HarviaHumiditySetPoint(device=self, name=self.name, sauna=self.sauna)
         self.numbers.append(humidityNumber)
+
+        aromaLevel = HarviaAromaLevelNumber(device=self, name=self.name, sauna=self.sauna)
+        self.numbers.append(aromaLevel)
 
         return self.numbers
 
@@ -249,10 +417,19 @@ class HarviaDevice:
         steamerSwitch = HarviaSteamerSwitch(device=self, name=self.name, sauna=self.sauna)
         fanSwitch = HarviaFanSwitch(device=self, name=self.name, sauna=self.sauna)
 
+        dehumidifierSwitch = HarviaDehumidifierSwitch(device=self, name=self.name, sauna=self.sauna)
+        autoFanSwitch = HarviaAutoFanSwitch(device=self, name=self.name, sauna=self.sauna)
+        aromaSwitch = HarviaAromaSwitch(device=self, name=self.name, sauna=self.sauna)
+        weeklyClockSwitch = HarviaWeeklyClockSwitch(device=self, name=self.name, sauna=self.sauna)
+
         self.switches.append(powerSwitch)
         self.switches.append(lightSwitch)
         self.switches.append(steamerSwitch)
         self.switches.append(fanSwitch)
+        self.switches.append(dehumidifierSwitch)
+        self.switches.append(autoFanSwitch)
+        self.switches.append(aromaSwitch)
+        self.switches.append(weeklyClockSwitch)
 
         return self.switches
 

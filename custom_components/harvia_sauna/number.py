@@ -60,6 +60,58 @@ class HarviaHumiditySetPoint(NumberEntity):
         await self._device.set_target_relative_humidity(value)
         self.async_write_ha_state()
 
+class HarviaAromaLevelNumber(NumberEntity):
+    """Representatie van een nummer entiteit om de aroma intensiteit in te stellen."""
+
+    def __init__(self, device, name, sauna):
+        """Initialiseer de aroma level number."""
+        self._name = name + ' Aroma Level'
+        self._state = None
+        self._device = device
+        self._device_id = device.id + '_aroma_level'
+        self._sauna = sauna
+        self._attr_unique_id = device.id + '_aroma_level'
+        self._attr_icon = 'mdi:flower-tulip'
+
+    @property
+    def name(self):
+        """Return de naam van de entiteit."""
+        return self._name
+
+    @property
+    def min_value(self):
+        """Return het minimum waarde."""
+        return 0 
+
+    @property
+    def max_value(self):
+        """Return het maximum waarde."""
+        return 10  # Assuming 10 is max intensity
+
+    @property
+    def step(self):
+        """Return de stapgrootte."""
+        return 1.0
+
+    @property
+    def value(self):
+        """Return de huidige ingestelde waarde."""
+        return self._state
+
+    async def async_added_to_hass(self):
+        """Acties die uitgevoerd moeten worden als entiteit aan HA is toegevoegd."""
+        self._device.aromaLevelNumber = self
+        await self._device.update_ha_devices()
+
+    async def update_state(self):
+        self.async_write_ha_state()
+
+    async def async_set_value(self, value):
+        """Update de ingestelde waarde."""
+        self._state = value
+        await self._device.set_aroma_level(value)
+        self.async_write_ha_state()
+
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up de Harvia numbers."""
     devices = await hass.data[DOMAIN]['api'].get_devices()

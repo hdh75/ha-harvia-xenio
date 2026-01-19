@@ -44,6 +44,44 @@ class HarviaDoorSensor(BinarySensorEntity):
     async def update_state(self):
         self.async_write_ha_state()
 
+class HarviaHeatingBinarySensor(BinarySensorEntity):
+    """Een sensor die aangeeft of de Harvia sauna aan het verwarmen is."""
+
+    def __init__(self, device, name, sauna):
+        """Initialiseer de sensor."""
+        self._name = name + ' Heating'
+        self._state = STATE_OFF
+        self._device = device
+        self._device_id = device.id + '_heating_sensor'
+        self._sauna = sauna
+        self._attr_unique_id = device.id + '_heating_sensor'
+        self._attr_icon = 'mdi:radiator'
+
+    @property
+    def name(self):
+        """Return de naam van de sensor."""
+        return self._name
+
+    @property
+    def device_class(self):
+        return  BinarySensorDeviceClass.HEAT
+
+    @property
+    def is_on(self):
+        """Return True als de sensor aan is/detecteert dat de verwarming aan is."""
+        if self._state == STATE_OFF:
+            return False
+        else:
+            return True
+
+    async def async_added_to_hass(self):
+        """Acties die uitgevoerd moeten worden als entiteit aan HA is toegevoegd."""
+        self._device.heatingBinarySensor = self
+        await self._device.update_ha_devices()
+
+    async def update_state(self):
+        self.async_write_ha_state()
+
 async def async_setup_entry(hass, entry, async_add_entities):
     """Set up de Harvia binary sensors."""
     devices = await hass.data[DOMAIN]['api'].get_devices()
