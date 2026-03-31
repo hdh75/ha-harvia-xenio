@@ -37,14 +37,12 @@ class HarviaSaunaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }),
             errors=errors,
         )
+    @staticmethod
+    @callback
     def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> config_entries.OptionsFlow:
-        return HarviaSaunaOptionsFlowHandler(config_entry)
+        return HarviaSaunaOptionsFlowHandler()
 
 class HarviaSaunaOptionsFlowHandler(config_entries.OptionsFlow):
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
     async def async_step_init(self, user_input=None):
         """Beheer de opties."""
         errors = {}

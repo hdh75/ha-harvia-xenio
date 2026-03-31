@@ -26,7 +26,7 @@ from homeassistant.const import STATE_ON, STATE_OFF, CONF_USERNAME, CONF_PASSWOR
 from pycognito import Cognito
 import boto3
 
-_LOGGER = logging.getLogger('custom_component.harvia_sauna')
+_LOGGER = logging.getLogger(__name__)
 ENTITY_TYPES = [ 'switch', 'climate',  'binary_sensor', 'sensor', 'number']
 
 class HarviaDevice:
@@ -606,7 +606,8 @@ class HarviaSauna:
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Setup de Harvia Sauna integratie."""
-    boto3.set_stream_logger('custom_component.harvia_sauna')
+    # boto3 stream logger removed — it adds a StreamHandler that
+    # bypasses HA log level filtering and floods the log output
 
     return True
 
