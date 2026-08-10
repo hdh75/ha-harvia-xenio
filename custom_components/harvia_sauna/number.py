@@ -1,12 +1,13 @@
 from homeassistant.components.number import NumberEntity
 from homeassistant.const import PERCENTAGE
-from .constants import DOMAIN, STORAGE_KEY, STORAGE_VERSION, REGION,_LOGGER
+from homeassistant.helpers.device_registry import DeviceInfo
+from .constants import DOMAIN, _LOGGER
 
 class HarviaHumiditySetPoint(NumberEntity):
-    """Representatie van een nummer entiteit om de gewenste vochtigheid in te stellen."""
+    """Representation of a number entity to set the target humidity."""
 
     def __init__(self, device, name, sauna):
-        """Initialiseer de humidity number set point."""
+        """Initialize the humidity setpoint number entity."""
         self._name = name + ' Steamer Humidity'
         self._state = None
         self._device = device
@@ -14,60 +15,56 @@ class HarviaHumiditySetPoint(NumberEntity):
         self._sauna = sauna
         self._attr_unique_id = device.id + '_humidity_set_point'
         self._attr_icon = 'mdi:cloud-percent'
+        # Native NumberEntity attributes (HA 2022.10+)
+        self._attr_native_unit_of_measurement = PERCENTAGE
+        self._attr_native_min_value = 0
+        self._attr_native_max_value = 140
+        self._attr_native_step = 1
+        self._attr_mode = "box"
+        # Bind this entity to a Home Assistant device
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device.id)},
+            name=getattr(device, "name", None) or name,
+            manufacturer="Harvia",
+            model=getattr(device, "model", None) or "Xenio WiFi",
+        )
 
     @property
     def name(self):
-        """Return de naam van de entiteit."""
+        """Return the name of the entity."""
         return self._name
 
-
     @property
-    def min_value(self):
-        """Return het minimum waarde van de vochtigheid die kan worden ingesteld."""
-        return 0  # Stel in op je minimum grenswaarde
-
-    @property
-    def max_value(self):
-        """Return het maximum waarde van de vochtigheid die kan worden ingesteld."""
-        return 140  # Stel in op je maximum grenswaarde
-
-    @property
-    def step(self):
-        """Return de stapgrootte van de vochtigheidsinstelling."""
-        return 1.0
-
-    @property
-    def unit_of_measurement(self):
-        """Return de eenheid van deze entiteit."""
-        return PERCENTAGE
-
-    @property
-    def value(self):
-        """Return de huidige ingestelde waarde."""
+    def native_value(self):
+        """Return the current set value."""
         return self._state
 
     async def async_added_to_hass(self):
-        """Acties die uitgevoerd moeten worden als entiteit aan HA is toegevoegd."""
+        """Actions to perform when the entity is added to Home Assistant."""
         self._device.humidityNumber = self
         await self._device.update_ha_devices()
 
     async def update_state(self):
+        # Avoid writing state for disabled entities (HA 2026+ warns about this)
+        if not self.enabled:
+            return
         self.async_write_ha_state()
 
-    async def async_set_value(self, value):
-        """Update de ingestelde waarde."""
+    async def async_set_native_value(self, value: float):
+        """Update the configured setpoint value."""
         self._state = value
         await self._device.set_target_relative_humidity(value)
-        self.async_write_ha_state()
+        if self.enabled:
+            self.async_write_ha_state()
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Set up de Harvia numbers."""
+    """Set up the Harvia number entities."""
     devices = await hass.data[DOMAIN]['api'].get_devices()
-    all_numbers = []  # Gebruik een andere variabele om verwarring te voorkomen
+    all_numbers = []  # Use a different variable name to avoid confusion
 
     for device in devices:
-        _LOGGER.debug(f"Loading sensors for device: {device.name}")
-        device_numbers = await device.get_numbers()  # Verkrijg  sensors voor het huidige apparaat
-        all_numbers.extend(device_numbers)  # Voeg de verkregen sensors toe aan de lijst
+        _LOGGER.debug(f"Loading numbers for device: {device.name}")
+        device_numbers = await device.get_numbers()  # Get number entities for the current device
+        all_numbers.extend(device_numbers)  # Add the number entities to the list
 
     async_add_entities(all_numbers, True)
